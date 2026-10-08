@@ -70,6 +70,66 @@ docker run -d \
 
 Compose 部署时对应修改 YAML 中的 `PASSWORD` 与 `'7777:8086'` 两处即可。
 
+### 高级参数
+
+以下参数均支持同名命令行 flag 与环境变量，优先级为 flag > 环境变量 > 默认值：
+
+| 环境变量 | 对应 flag | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `QBIT_USERNAME` | `--username` | `admin` | qBittorrent WebUI 登录用户名 |
+| `QBIT_PROCESS_MATCH` | `--process-match` | `qbittorrent-nox` | 在 `/proc/*/cmdline` 中定位 qBittorrent 进程的匹配串 |
+| `QBIT_PASSWORD_SOURCE` | `--password-source` | `cmdline` | qBittorrent 密码来源：`cmdline` 解析 `--webui-password`；`environ` 读取进程环境变量 `WEBUI_PASSWORD` |
+| `QBIT_SOCK_PARAM` | `--sock-param` | `webui-sock-path` | 从命令行解析 socket 路径的参数名 |
+| `QBIT_SOCKET_PATH` | `--sock-path` | 空 | 直接指定 socket 路径，设置后跳过命令行解析 |
+
+fnOS 保持默认即可；极空间需修改其中两项，见下节。
+
+## 极空间（ZSpace）部署
+
+极空间也自带 qBittorrent（WebUI 通过 Unix socket 提供），但与 fnOS 有两处不同：
+
+- WebUI 密码不在命令行，而在 qBittorrent 进程环境变量 `WEBUI_PASSWORD` 中
+- socket 参数名为 `--webui-unix-socket`（fnOS 为 `--webui-sock-path`），socket 位于 `/dev/shm/qbittorrent.sock`
+
+因此需额外设置 `QBIT_PASSWORD_SOURCE=environ` 与 `QBIT_SOCK_PARAM=webui-unix-socket`，并挂载 `/dev/shm`：
+
+```yaml
+services:
+  fnos-qbit-proxy:
+    image: ghcr.io/xxxuuu/fnos-qb-proxy:latest
+    container_name: fnOS-qBit-Proxy
+    pid: 'host'
+    environment:
+      - PASSWORD=fnosnb
+      - QBIT_PASSWORD_SOURCE=environ
+      - QBIT_SOCK_PARAM=webui-unix-socket
+    ports:
+      - '7777:8086'
+    volumes:
+      - /dev/shm:/dev/shm:ro
+```
+
+`docker run` 等价命令：
+
+```bash
+docker run -d \
+  --name fnOS-qBit-Proxy \
+  --pid host \
+  -e PASSWORD=fnosnb \
+  -e QBIT_PASSWORD_SOURCE=environ \
+  -e QBIT_SOCK_PARAM=webui-unix-socket \
+  -p 7777:8086 \
+  -v /dev/shm:/dev/shm:ro \
+  ghcr.io/xxxuuu/fnos-qb-proxy:latest
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `-e QBIT_PASSWORD_SOURCE=environ` | 从 qBittorrent 进程环境变量 `WEBUI_PASSWORD` 读取密码 |
+| `-e QBIT_SOCK_PARAM=webui-unix-socket` | 按 `--webui-unix-socket` 从命令行解析 socket 路径 |
+| `-v /dev/shm:/dev/shm:ro` | 极空间的 socket 位于 `/dev/shm/qbittorrent.sock`，需挂载进容器 |
+| `--pid host` | 见[部署要求](#部署要求) |
+
 ## 验证与排查
 
 部署完成后访问 `http://{host}:7777`（默认密码 `fnosnb`），能看到 qBittorrent WebUI 即成功。
@@ -80,7 +140,7 @@ Compose 部署时对应修改 YAML 中的 `PASSWORD` 与 `'7777:8086'` 两处即
 | --- | --- |
 | `qbt.sock: connect: no such file or directory`（宿主机上 sock 存在） | UDS 所在目录未挂载进容器（如 fnOS 升级后 socket 移到了 `/usr/trim/var/downloadcenter` 但未挂载该目录），检查两处 `-v` 挂载 |
 | `qbt.sock: connect: no such file or directory`（宿主机上 sock 也不存在） | fnOS 下载中心（`dlcenter`）在一段时间无人使用后会自动停止，qBittorrent 以 `--stop-with-process` 跟随其退出，sock 随之消失。重新打开下载中心即可恢复；在 WebUI 中保留几个始终做种的 BT 任务可保活，详见 [issue #14](https://github.com/xxxuuu/fnos-qb-proxy/issues/14) |
-| `qbittorrent-nox process not found` | 宿主机上 fnOS 下载器未运行（或已自动退出，同上），或容器未配置 `--pid host` |
+| `qbittorrent process matching "qbittorrent-nox" not found` | 宿主机上 fnOS 下载器未运行（或已自动退出，同上），或容器未配置 `--pid host` |
 
 ## 自行构建镜像
 

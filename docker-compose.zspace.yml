@@ -1,0 +1,34 @@
+# 极空间（ZSpace）专用部署配置
+#
+# 与 fnOS 的两处差异：
+#   1. WebUI 密码在 qBittorrent 进程环境变量 WEBUI_PASSWORD 中，而非命令行
+#   2. socket 参数名为 --webui-unix-socket，socket 位于 /dev/shm/qbittorrent.sock
+# 因此需设置 QBIT_PASSWORD_SOURCE=environ 与 QBIT_SOCK_PARAM=webui-unix-socket，并挂载 /dev/shm
+services:
+  zspace-qbit-proxy:
+    image: ghcr.io/xxxuuu/fnos-qb-proxy:latest
+    container_name: ZSpace-qBit-Proxy
+    # 用于扫描宿主机 /proc 找到 qbittorrent-nox 进程
+    pid: 'host'
+    network_mode: 'bridge'
+    environment:
+      - PASSWORD=fnosnb
+      - QBIT_PASSWORD_SOURCE=environ
+      - QBIT_SOCK_PARAM=webui-unix-socket
+    ports:
+      - '7777:8086'
+    volumes:
+      - /dev/shm:/dev/shm:ro
+
+# 若极空间的 Docker 不支持 pid: host，可去掉 pid 配置，改为直接指定 socket 路径与密码，
+# 完全绕开 /proc 探测（此时只需挂载 socket 文件本身）：
+#
+#   environment:
+#     - PASSWORD=fnosnb
+#     - QBIT_SOCKET_PATH=/dev/shm/qbittorrent.sock
+#   volumes:
+#     - /dev/shm/qbittorrent.sock:/dev/shm/qbittorrent.sock:ro
+#
+# 密码获取方式（在极空间上执行）：
+#   PID=$(pidof qbittorrent-nox | awk '{print $1}')
+#   tr '\0' '\n' < /proc/$PID/environ | sed -n 's/^WEBUI_PASSWORD=//p'

@@ -18,13 +18,14 @@ type FnosProxy struct {
 	*httputil.ReverseProxy
 	debug            bool
 	expectedPassword string
+	username         string
 	sid              string
 	port             int
 	qb               *Qbit
 }
 
-func NewFnosProxy(debug bool, expectedPassword string, port int) *FnosProxy {
-	qb := NewQbit()
+func NewFnosProxy(cfg Config) *FnosProxy {
+	qb := NewQbit(cfg)
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			if uds, err := qb.GetUds(); err == nil {
@@ -35,9 +36,10 @@ func NewFnosProxy(debug bool, expectedPassword string, port int) *FnosProxy {
 		},
 	}
 	p := &FnosProxy{
-		debug:            debug,
-		expectedPassword: expectedPassword,
-		port:             port,
+		debug:            cfg.Debug,
+		expectedPassword: cfg.ExpectedPassword,
+		username:         cfg.Username,
+		port:             cfg.Port,
 		qb:               qb,
 	}
 
@@ -101,7 +103,7 @@ func (p *FnosProxy) reloadSid() error {
 	}
 
 	data := url.Values{}
-	data.Set("username", "admin")
+	data.Set("username", p.username)
 	if password, err := p.qb.GetPassword(); err != nil {
 		return fmt.Errorf("get password: %w", err)
 	} else {
@@ -141,7 +143,7 @@ func (p *FnosProxy) handlAuth(r *httputil.ProxyRequest) {
 				}
 			}
 		}
-		body = fmt.Appendf(nil, "username=admin&password=%s", outPassword)
+		body = fmt.Appendf(nil, "username=%s&password=%s", url.QueryEscape(p.username), url.QueryEscape(outPassword))
 		r.Out.Header.Set("Content-Length", fmt.Sprintf("%d", len(body)))
 		r.Out.ContentLength = int64(len(body))
 		r.Out.Body = io.NopCloser(bytes.NewBuffer(body))
