@@ -11,6 +11,9 @@ services:
     # 用于扫描宿主机 /proc 找到 qbittorrent-nox 进程
     pid: 'host'
     network_mode: 'bridge'
+    # 读取宿主 qBittorrent 进程 /proc/<pid>/environ 需要该权限
+    cap_add:
+      - SYS_PTRACE
     environment:
       - PASSWORD=fnosnb
       - QBIT_PASSWORD_SOURCE=environ
@@ -24,7 +27,7 @@ services:
 # 完全绕开 /proc 探测（此时只需挂载 socket 文件本身）：
 #
 #   environment:
-#     - PASSWORD=fnosnb
+#     - PASSWORD=sickonb
 #     - QBIT_SOCKET_PATH=/dev/shm/qbittorrent.sock
 #   volumes:
 #     - /dev/shm/qbittorrent.sock:/dev/shm/qbittorrent.sock:ro
